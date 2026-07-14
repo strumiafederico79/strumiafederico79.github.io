@@ -4355,42 +4355,6 @@
                   style="width: 100%; border-radius: 5px; background: var(--surface2); display: block"
                 ></canvas>
               </div>
-              <div id="dynEqRecWrap" style="display: none; margin-bottom: 0.7rem">
-                <div
-                  style="
-                    font-size: 0.7rem;
-                    color: var(--muted);
-                    margin-bottom: 0.28rem;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.45rem;
-                  "
-                >
-                  <span
-                    style="
-                      display: inline-block;
-                      width: 7px;
-                      height: 7px;
-                      border-radius: 50%;
-                      background: var(--lilac);
-                    "
-                  ></span>
-                  Dynamic EQ — detección en vivo (resonancias / sibilancia)
-                </div>
-                <div
-                  id="dynEqRecBody"
-                  style="
-                    background: var(--surface2);
-                    border: 1px solid var(--border);
-                    border-left: 2px solid var(--lilac);
-                    border-radius: 6px;
-                    padding: 0.6rem 0.75rem;
-                    font-size: 0.76rem;
-                    line-height: 1.5;
-                    color: var(--text);
-                  "
-                ></div>
-              </div>
               <canvas id="previewCanvas"></canvas>
               <div class="preview-audio" id="previewAudioWrap"></div>
             </div>
@@ -4966,7 +4930,6 @@
         document.getElementById("previewWrap").style.display = "none";
         document.getElementById("previewAudioWrap").innerHTML = "";
         hideLiveSpectrum();
-        hideDynEqRecommendation();
         setPreviewStatus("En espera…");
 
         loadFileBuffer(f);
@@ -6472,72 +6435,6 @@
         _liveSpecSmooth = null;
       }
 
-      // ── Dynamic EQ — recomendación en vivo (resonancias / sibilancia) ───────────
-      // Viene en metrics.dynamic_eq_recommendation de cada chunk de /ws/master-stream
-      // (ver streaming_engine.py). Se recalcula cada ~6s de audio, no en cada chunk,
-      // así que comparamos por "summary" para no re-renderizar (y resetear el botón
-      // "Aplicado") en cada uno de los chunks que repiten la misma detección.
-      let _lastDynEqRec = null;
-      let _lastDynEqRecSummary = null;
-
-      function renderDynEqRecommendation(rec) {
-        if (!rec) return;
-        _lastDynEqRec = rec;
-        if (rec.summary === _lastDynEqRecSummary) return;
-        _lastDynEqRecSummary = rec.summary;
-
-        const wrap = document.getElementById("dynEqRecWrap");
-        const body = document.getElementById("dynEqRecBody");
-        if (!wrap || !body) return;
-        wrap.style.display = "block";
-
-        const resonances = rec.resonances || [];
-        const sib = rec.sibilance || {};
-
-        let html = `<div style="margin-bottom:.5rem">${rec.summary || ""}</div>`;
-
-        if (resonances.length) {
-          html += `<div style="margin-bottom:.4rem"><b>Resonancias detectadas:</b><ul style="margin:.25rem 0 0;padding-left:1.1rem">`;
-          resonances.slice(0, 4).forEach((r, i) => {
-            html += `<li>${r.freq_hz.toFixed(0)} Hz (+${r.excess_db.toFixed(1)} dB)${i === 0 ? ' — <span style="color:var(--lilac)">se usará para Reso</span>' : ""}</li>`;
-          });
-          html += `</ul></div>`;
-        }
-
-        if (sib.present) {
-          html += `<div style="margin-bottom:.4rem"><b>Sibilancia:</b> ${sib.band_hz[0].toFixed(0)}-${sib.band_hz[1].toFixed(0)} Hz, severidad ${sib.severity_db.toFixed(1)} dB (${sib.frames_flagged_pct.toFixed(1)}% de cuadros)</div>`;
-        }
-
-        if (!resonances.length && !sib.present) {
-          html += `<div style="color:var(--muted)">Sin problemas relevantes detectados en este momento del track.</div>`;
-        }
-
-        html += `<div style="display:flex;gap:.4rem;margin-top:.5rem">
-      <button class="ai-suggestion-apply-btn" id="dynEqApplyBtn" style="flex:1">✓ Aplicar a Reso / De-esser</button>
-    </div>`;
-
-        body.innerHTML = html;
-
-        const applyBtn = document.getElementById("dynEqApplyBtn");
-        if (applyBtn) {
-          applyBtn.addEventListener("click", () => {
-            if (!_lastDynEqRec || !_lastDynEqRec.recommended_params) return;
-            applyPresetToUI(_lastDynEqRec.recommended_params);
-            applyBtn.textContent = "✓ Aplicado";
-            applyBtn.disabled = true;
-          });
-        }
-      }
-
-      function hideDynEqRecommendation() {
-        const wrap = document.getElementById("dynEqRecWrap");
-        if (wrap) wrap.style.display = "none";
-        const body = document.getElementById("dynEqRecBody");
-        if (body) body.innerHTML = "";
-        _lastDynEqRec = null;
-        _lastDynEqRecSummary = null;
-      }
-
       function drawFFTOnCanvas(canvas, series) {
         const dpr = window.devicePixelRatio || 1;
         const cssWidth = canvas.clientWidth || 600,
@@ -6966,8 +6863,6 @@ self.onmessage = function(e) {
                   channels = msg.channels || channels;
                   updateMainMetersFromMetrics(lastMetrics);
                   if (lastMetrics?.spectrum?.bands_db) drawJobSpectrum(lastMetrics.spectrum.bands_db);
-                  if (lastMetrics?.dynamic_eq_recommendation)
-                    renderDynEqRecommendation(lastMetrics.dynamic_eq_recommendation);
                   const pct = lastMetrics?.progress_pct != null ? ` ${lastMetrics.progress_pct.toFixed(1)}%` : "";
                   setPreviewStatus(`Meters en vivo${pct}…`);
                 } else if (msg.event === "done") resolve();
